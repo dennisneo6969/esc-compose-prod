@@ -2,7 +2,7 @@ services:
 
   redis:
     image: redis:8-alpine3.21
-    restart: unless-stopped
+    restart: always
     command: [ "redis-server", "--appendonly", "yes" ]
     volumes:
       - redis_data:/data
@@ -18,7 +18,7 @@ services:
   web:
     image: andreastuko/esc:latest
     container_name: esc_web
-    restart: unless-stopped
+    restart: always
     env_file:
       - .env.docker
     depends_on:
@@ -58,7 +58,7 @@ services:
   celery_worker:
     image: andreastuko/esc:latest
     container_name: esc_worker
-    restart: unless-stopped
+    restart: always
     command: celery -A esc worker --loglevel=info --concurrency=1
     volumes:
       - logs_data:/app/logs
@@ -82,7 +82,7 @@ services:
   celery_beat:
     image: andreastuko/esc:latest
     container_name: esc_beat
-    restart: unless-stopped
+    restart: always
     command: celery -A esc beat -l info
     volumes:
       - logs_data:/app/logs
