@@ -23,8 +23,8 @@ services:
       redis:
         condition: service_healthy
     command: ["./build.sh"]
-    ports:
-      - "8006:8000" # safe: only web is exposed
+    expose:
+      - "8000"
     volumes:
       - logs_data:/app/logs
       - geoip:/app/geoip
@@ -39,10 +39,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    labels:
-      service: web
-      role: api
-      environment: production
     security_opt:
       - no-new-privileges:true
 
@@ -74,10 +70,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 300s
-    labels:
-      service: celery
-      role: worker
-      environment: production
     security_opt:
       - no-new-privileges:true
 
@@ -97,10 +89,6 @@ services:
     volumes:
       - logs_data:/app/logs
       - geoip:/app/geoip
-    labels:
-      service: celery
-      role: beat
-      environment: production
     security_opt:
       - no-new-privileges:true
 
