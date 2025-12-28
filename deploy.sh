@@ -892,7 +892,7 @@ print_completion() {
 main() {
     print_header "ESC Django Application - Automated Deployment"
     
-    check_root
+    # check_root
     check_sudo
     check_os
     gather_config
