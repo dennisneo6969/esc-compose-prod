@@ -42,12 +42,12 @@ print_step() {
 }
 
 # Check if running as root
-check_root() {
-    if [ "$EUID" -eq 0 ]; then
-        print_error "Please do not run this script as root. Run as a regular user with sudo privileges."
-        exit 1
-    fi
-}
+# check_root() {
+#     if [ "$EUID" -eq 0 ]; then
+#         print_error "Please do not run this script as root. Run as a regular user with sudo privileges."
+#         exit 1
+#     fi
+# }
 
 # Check sudo access
 check_sudo() {
