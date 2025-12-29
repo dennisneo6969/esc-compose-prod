@@ -41,14 +41,6 @@ print_step() {
     echo -e "${MAGENTA}▶ $1${NC}"
 }
 
-# Check if running as root
-# check_root() {
-#     if [ "$EUID" -eq 0 ]; then
-#         print_error "Please do not run this script as root. Run as a regular user with sudo privileges."
-#         exit 1
-#     fi
-# }
-
 # Check sudo access
 check_sudo() {
     if ! sudo -n true 2>/dev/null; then
@@ -75,24 +67,107 @@ check_os() {
     fi
 }
 
+# Load existing configuration if available
+load_existing_config() {
+    CONFIG_FILE="$DEFAULT_APP_DIR/.deployment_config"
+    
+    if [ -f "$CONFIG_FILE" ]; then
+        print_info "Found existing configuration"
+        source "$CONFIG_FILE"
+        EXISTING_CONFIG=true
+    else
+        EXISTING_CONFIG=false
+    fi
+}
+
+# Save configuration for future runs
+save_config() {
+    CONFIG_FILE="$APP_DIR/.deployment_config"
+    
+    cat > "$CONFIG_FILE" << EOF
+# ESC Deployment Configuration
+# This file is used to remember settings for re-deployments
+DOMAIN_NAME="$DOMAIN_NAME"
+DOCKER_USERNAME="$DOCKER_USERNAME"
+APP_DIR="$APP_DIR"
+SETUP_SSL="$SETUP_SSL"
+SSL_EMAIL="$SSL_EMAIL"
+EOF
+    
+    chmod 600 "$CONFIG_FILE"
+    print_success "Configuration saved for future deployments"
+}
+
 # Interactive configuration
 gather_config() {
     print_header "Configuration Setup"
     
-    # Domain name
-    read -p "Enter your domain name (e.g., example.com): " DOMAIN_NAME
-    while [ -z "$DOMAIN_NAME" ]; do
-        print_warning "Domain name cannot be empty"
-        read -p "Enter your domain name: " DOMAIN_NAME
-    done
+    # Set default app directory first
+    DEFAULT_APP_DIR="/opt/apps/esc"
     
-    # Docker Hub credentials
+    # Try to load existing configuration
+    load_existing_config
+    
+    if [ "$EXISTING_CONFIG" = true ]; then
+        print_success "Existing deployment detected!"
+        echo
+        echo "Previous configuration:"
+        echo "  Domain: $DOMAIN_NAME"
+        echo "  Docker Hub User: $DOCKER_USERNAME"
+        echo "  App Directory: $APP_DIR"
+        echo "  SSL: $SETUP_SSL"
+        echo
+        read -p "Use existing configuration? [Y/n]: " USE_EXISTING
+        USE_EXISTING=${USE_EXISTING:-Y}
+        
+        if [[ "$USE_EXISTING" =~ ^[Yy]$ ]]; then
+            print_info "Using saved configuration"
+            
+            # Still ask for Docker password (not saved for security)
+            print_info "Docker Hub password required (not saved for security)"
+            read -sp "Docker Hub password/token: " DOCKER_PASSWORD
+            echo
+            while [ -z "$DOCKER_PASSWORD" ]; do
+                print_warning "Docker Hub password cannot be empty"
+                read -sp "Docker Hub password/token: " DOCKER_PASSWORD
+                echo
+            done
+            
+            # Skip other questions, use existing values
+            CREATE_USER="n"  # Already created
+            SETUP_FIREWALL="n"  # Already configured
+            
+            return 0
+        else
+            print_info "Reconfiguring deployment..."
+        fi
+    fi
+    
+    # Domain name (with default from existing config if available)
+    if [ -n "$DOMAIN_NAME" ]; then
+        read -p "Enter your domain name [$DOMAIN_NAME]: " NEW_DOMAIN_NAME
+        DOMAIN_NAME=${NEW_DOMAIN_NAME:-$DOMAIN_NAME}
+    else
+        read -p "Enter your domain name (e.g., example.com): " DOMAIN_NAME
+        while [ -z "$DOMAIN_NAME" ]; do
+            print_warning "Domain name cannot be empty"
+            read -p "Enter your domain name: " DOMAIN_NAME
+        done
+    fi
+    
+    # Docker Hub credentials (with default username from existing config if available)
     print_info "Docker Hub credentials are required to pull the private image"
-    read -p "Docker Hub username: " DOCKER_USERNAME
-    while [ -z "$DOCKER_USERNAME" ]; do
-        print_warning "Docker Hub username cannot be empty"
+    
+    if [ -n "$DOCKER_USERNAME" ]; then
+        read -p "Docker Hub username [$DOCKER_USERNAME]: " NEW_DOCKER_USERNAME
+        DOCKER_USERNAME=${NEW_DOCKER_USERNAME:-$DOCKER_USERNAME}
+    else
         read -p "Docker Hub username: " DOCKER_USERNAME
-    done
+        while [ -z "$DOCKER_USERNAME" ]; do
+            print_warning "Docker Hub username cannot be empty"
+            read -p "Docker Hub username: " DOCKER_USERNAME
+        done
+    fi
     
     read -sp "Docker Hub password/token: " DOCKER_PASSWORD
     echo
@@ -102,26 +177,92 @@ gather_config() {
         echo
     done
     
-    # Application directory
-    DEFAULT_APP_DIR="/opt/apps/esc"
-    read -p "Application directory [$DEFAULT_APP_DIR]: " APP_DIR
-    APP_DIR=${APP_DIR:-$DEFAULT_APP_DIR}
+    # Application directory (with default from existing config if available)
+    if [ -n "$APP_DIR" ]; then
+        read -p "Application directory [$APP_DIR]: " NEW_APP_DIR
+        APP_DIR=${NEW_APP_DIR:-$APP_DIR}
+    else
+        read -p "Application directory [$DEFAULT_APP_DIR]: " APP_DIR
+        APP_DIR=${APP_DIR:-$DEFAULT_APP_DIR}
+    fi
     
-    # Create deployer user
-    read -p "Create a dedicated 'deployer' user? (recommended) [Y/n]: " CREATE_USER
-    CREATE_USER=${CREATE_USER:-Y}
+    # Create deployer user (skip if re-deploying)
+    if [ "$EXISTING_CONFIG" != true ]; then
+        read -p "Create a dedicated 'deployer' user? (recommended) [Y/n]: " CREATE_USER
+        CREATE_USER=${CREATE_USER:-Y}
+    fi
     
-    # Setup firewall
-    read -p "Configure UFW firewall? (recommended) [Y/n]: " SETUP_FIREWALL
-    SETUP_FIREWALL=${SETUP_FIREWALL:-Y}
+    # Setup firewall (skip if re-deploying)
+    if [ "$EXISTING_CONFIG" != true ]; then
+        read -p "Configure UFW firewall? (recommended) [Y/n]: " SETUP_FIREWALL
+        SETUP_FIREWALL=${SETUP_FIREWALL:-Y}
+    fi
     
-    # Confirmation
+    # SSL Certificate setup (with default from existing config if available)
+    if [ "$EXISTING_CONFIG" = true ] && [ -n "$SETUP_SSL" ]; then
+        echo
+        print_info "SSL Certificate Configuration"
+        echo "Current SSL setup: $SETUP_SSL"
+        read -p "Keep existing SSL configuration? [Y/n]: " KEEP_SSL
+        KEEP_SSL=${KEEP_SSL:-Y}
+        
+        if [[ "$KEEP_SSL" =~ ^[Yy]$ ]]; then
+            print_info "Keeping existing SSL configuration"
+        else
+            # Ask for new SSL configuration
+            configure_ssl_option
+        fi
+    else
+        configure_ssl_option
+    fi
+}
+
+# Configure SSL option (extracted to separate function)
+configure_ssl_option() {
+    echo
+    print_info "SSL Certificate Configuration"
+    echo "Choose SSL certificate option:"
+    echo "  1) Let's Encrypt (Free, auto-renewing, requires valid domain)"
+    echo "  2) Self-signed (Works with IP address, not trusted by browsers)"
+    echo "  3) None (Use Cloudflare SSL only)"
+    read -p "Select option [1/2/3]: " SSL_OPTION
+    SSL_OPTION=${SSL_OPTION:-3}
+    
+    if [ "$SSL_OPTION" = "1" ]; then
+        SETUP_SSL="letsencrypt"
+        if [ -n "$SSL_EMAIL" ]; then
+            read -p "Email for Let's Encrypt notifications [$SSL_EMAIL]: " NEW_SSL_EMAIL
+            SSL_EMAIL=${NEW_SSL_EMAIL:-$SSL_EMAIL}
+        else
+            read -p "Email for Let's Encrypt notifications: " SSL_EMAIL
+            while [ -z "$SSL_EMAIL" ]; do
+                print_warning "Email cannot be empty for Let's Encrypt"
+                read -p "Email for Let's Encrypt notifications: " SSL_EMAIL
+            done
+        fi
+    elif [ "$SSL_OPTION" = "2" ]; then
+        SETUP_SSL="selfsigned"
+        print_warning "Self-signed certificates will show security warnings in browsers"
+        print_info "This is useful for testing or IP-based access"
+    else
+        SETUP_SSL="none"
+        SSL_EMAIL=""
+        print_info "Will use HTTP only (Cloudflare handles SSL)"
+    fi
+}
     print_header "Configuration Summary"
     echo "Domain: $DOMAIN_NAME"
     echo "Docker Hub User: $DOCKER_USERNAME"
     echo "App Directory: $APP_DIR"
     echo "Create deployer user: $CREATE_USER"
     echo "Setup firewall: $SETUP_FIREWALL"
+    if [ "$SETUP_SSL" = "letsencrypt" ]; then
+        echo "SSL: Let's Encrypt (Email: $SSL_EMAIL)"
+    elif [ "$SETUP_SSL" = "selfsigned" ]; then
+        echo "SSL: Self-signed certificate"
+    else
+        echo "SSL: None (Cloudflare only)"
+    fi
     echo
     
     read -p "Proceed with installation? [Y/n]: " CONFIRM
@@ -242,6 +383,7 @@ setup_env_file() {
         
         if [[ ! "$RECONFIG_ENV" =~ ^[Yy]$ ]]; then
             print_info "Keeping existing environment file"
+            print_success "Skipping environment configuration"
             return
         fi
         
@@ -517,8 +659,251 @@ install_nginx() {
         print_success "Nginx installed"
     fi
     
-    # Create Nginx configuration
-    print_info "Creating Nginx configuration for $DOMAIN_NAME..."
+    # Check if SSL configuration already exists and matches current selection
+    if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ] && [ "$SETUP_SSL" = "letsencrypt" ]; then
+        print_info "Let's Encrypt certificate already exists, skipping setup"
+    elif [ -f "/etc/nginx/ssl/selfsigned.crt" ] && [ "$SETUP_SSL" = "selfsigned" ]; then
+        print_info "Self-signed certificate already exists, skipping generation"
+    else
+        # Setup SSL if requested
+        if [ "$SETUP_SSL" = "letsencrypt" ]; then
+            setup_letsencrypt_ssl
+        elif [ "$SETUP_SSL" = "selfsigned" ]; then
+            setup_selfsigned_ssl
+        fi
+    fi
+    
+    # Create Nginx configuration based on SSL choice
+    if [ "$SETUP_SSL" != "none" ]; then
+        create_nginx_config_with_ssl
+    else
+        create_nginx_config_http_only
+    fi
+    
+    # Enable site
+    sudo ln -sf /etc/nginx/sites-available/esc /etc/nginx/sites-enabled/
+    
+    # Remove default site
+    sudo rm -f /etc/nginx/sites-enabled/default
+    
+    # Test configuration
+    sudo nginx -t
+    
+    if [ $? -eq 0 ]; then
+        sudo systemctl restart nginx
+        sudo systemctl enable nginx
+        print_success "Nginx configured and started"
+    else
+        print_error "Nginx configuration test failed"
+        exit 1
+    fi
+}
+
+# Setup Let's Encrypt SSL
+setup_letsencrypt_ssl() {
+    print_header "Setting Up Let's Encrypt SSL"
+    
+    # Install certbot
+    if ! command -v certbot &> /dev/null; then
+        print_info "Installing Certbot..."
+        sudo apt install -y certbot python3-certbot-nginx
+        print_success "Certbot installed"
+    else
+        print_warning "Certbot already installed"
+    fi
+    
+    # Stop nginx temporarily
+    sudo systemctl stop nginx || true
+    
+    # Obtain certificate
+    print_info "Obtaining SSL certificate from Let's Encrypt..."
+    print_warning "This requires your domain to be pointing to this server's IP"
+    
+    sudo certbot certonly --standalone \
+        --non-interactive \
+        --agree-tos \
+        --email "$SSL_EMAIL" \
+        -d "$DOMAIN_NAME" \
+        -d "www.$DOMAIN_NAME"
+    
+    if [ $? -eq 0 ]; then
+        print_success "SSL certificate obtained successfully"
+        
+        # Setup auto-renewal
+        print_info "Setting up automatic certificate renewal..."
+        (sudo crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet --post-hook 'systemctl reload nginx'") | sudo crontab -
+        print_success "Auto-renewal configured (runs daily at 3 AM)"
+    else
+        print_error "Failed to obtain SSL certificate"
+        print_warning "Falling back to HTTP-only configuration"
+        SETUP_SSL="none"
+    fi
+}
+
+# Setup Self-signed SSL
+setup_selfsigned_ssl() {
+    print_header "Setting Up Self-Signed SSL Certificate"
+    
+    # Create SSL directory
+    sudo mkdir -p /etc/nginx/ssl
+    
+    print_info "Generating self-signed SSL certificate..."
+    
+    # Generate self-signed certificate
+    sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout /etc/nginx/ssl/selfsigned.key \
+        -out /etc/nginx/ssl/selfsigned.crt \
+        -subj "/C=KE/ST=Nairobi/L=Nairobi/O=ESC/CN=$DOMAIN_NAME"
+    
+    # Generate dhparam for added security
+    print_info "Generating Diffie-Hellman parameters (this may take a minute)..."
+    sudo openssl dhparam -out /etc/nginx/ssl/dhparam.pem 2048
+    
+    print_success "Self-signed certificate created"
+    print_warning "Note: Browsers will show a security warning for self-signed certificates"
+}
+
+# Create Nginx config with SSL
+create_nginx_config_with_ssl() {
+    print_info "Creating Nginx configuration with SSL..."
+    
+    if [ "$SETUP_SSL" = "letsencrypt" ]; then
+        SSL_CERT="/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem"
+        SSL_KEY="/etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem"
+    else
+        SSL_CERT="/etc/nginx/ssl/selfsigned.crt"
+        SSL_KEY="/etc/nginx/ssl/selfsigned.key"
+    fi
+    
+    sudo tee /etc/nginx/sites-available/esc > /dev/null << EOF
+upstream django_app {
+    server 127.0.0.1:8000;
+    keepalive 64;
+}
+
+# HTTP server - redirect to HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $DOMAIN_NAME www.$DOMAIN_NAME;
+    
+    # Allow Let's Encrypt challenges
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+    
+    # Redirect all other traffic to HTTPS
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+
+# HTTPS server
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name $DOMAIN_NAME www.$DOMAIN_NAME;
+
+    # SSL Configuration
+    ssl_certificate $SSL_CERT;
+    ssl_certificate_key $SSL_KEY;
+    
+    # SSL Security Settings
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384';
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+EOF
+
+    if [ "$SETUP_SSL" = "selfsigned" ]; then
+        sudo tee -a /etc/nginx/sites-available/esc > /dev/null << EOF
+    ssl_dhparam /etc/nginx/ssl/dhparam.pem;
+EOF
+    fi
+
+    if [ "$SETUP_SSL" = "letsencrypt" ]; then
+        sudo tee -a /etc/nginx/sites-available/esc > /dev/null << EOF
+    
+    # OCSP Stapling
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    ssl_trusted_certificate /etc/letsencrypt/live/$DOMAIN_NAME/chain.pem;
+EOF
+    fi
+
+    sudo tee -a /etc/nginx/sites-available/esc > /dev/null << 'EOF'
+
+    # Security headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Logging
+    access_log /var/log/nginx/esc_access.log;
+    error_log /var/log/nginx/esc_error.log;
+
+    # Client body size limit
+    client_max_body_size 100M;
+
+    # Timeouts
+    proxy_connect_timeout 600s;
+    proxy_send_timeout 600s;
+    proxy_read_timeout 600s;
+
+    location / {
+        proxy_pass http://django_app;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # Cloudflare real IP
+        set_real_ip_from 173.245.48.0/20;
+        set_real_ip_from 103.21.244.0/22;
+        set_real_ip_from 103.22.200.0/22;
+        set_real_ip_from 103.31.4.0/22;
+        set_real_ip_from 141.101.64.0/18;
+        set_real_ip_from 108.162.192.0/18;
+        set_real_ip_from 190.93.240.0/20;
+        set_real_ip_from 188.114.96.0/20;
+        set_real_ip_from 197.234.240.0/22;
+        set_real_ip_from 198.41.128.0/17;
+        set_real_ip_from 162.158.0.0/15;
+        set_real_ip_from 104.16.0.0/13;
+        set_real_ip_from 104.24.0.0/14;
+        set_real_ip_from 172.64.0.0/13;
+        set_real_ip_from 131.0.72.0/22;
+        set_real_ip_from 2400:cb00::/32;
+        set_real_ip_from 2606:4700::/32;
+        set_real_ip_from 2803:f800::/32;
+        set_real_ip_from 2405:b500::/32;
+        set_real_ip_from 2405:8100::/32;
+        set_real_ip_from 2a06:98c0::/29;
+        set_real_ip_from 2c0f:f248::/32;
+        real_ip_header CF-Connecting-IP;
+    }
+
+    # Health check endpoint
+    location /health {
+        access_log off;
+        proxy_pass http://django_app;
+        proxy_set_header Host $host;
+    }
+}
+EOF
+}
+
+# Create Nginx config HTTP only (original)
+create_nginx_config_http_only() {
+    print_info "Creating Nginx configuration (HTTP only)..."
     
     sudo tee /etc/nginx/sites-available/esc > /dev/null << EOF
 upstream django_app {
@@ -594,24 +979,6 @@ server {
     }
 }
 EOF
-    
-    # Enable site
-    sudo ln -sf /etc/nginx/sites-available/esc /etc/nginx/sites-enabled/
-    
-    # Remove default site
-    sudo rm -f /etc/nginx/sites-enabled/default
-    
-    # Test configuration
-    sudo nginx -t
-    
-    if [ $? -eq 0 ]; then
-        sudo systemctl restart nginx
-        sudo systemctl enable nginx
-        print_success "Nginx configured and started"
-    else
-        print_error "Nginx configuration test failed"
-        exit 1
-    fi
 }
 
 # Setup systemd service
@@ -845,11 +1212,30 @@ print_completion() {
     echo
     
     echo "Important Next Steps:"
-    echo "  1. Configure Cloudflare:"
-    echo "     - Set SSL/TLS to 'Flexible' or 'Full'"
+    echo "  1. Configure Cloudflare (if using):"
+    echo "     - Set SSL/TLS to 'Full (strict)' if using Let's Encrypt"
+    echo "     - Set SSL/TLS to 'Flexible' if not using server SSL"
     echo "     - Enable 'Always Use HTTPS'"
     echo "     - Add A record pointing to this server's IP"
     echo
+    
+    if [ "$SETUP_SSL" = "letsencrypt" ]; then
+        echo "  SSL Certificate Info:"
+        echo "     - Let's Encrypt certificate installed"
+        echo "     - Auto-renewal configured (daily at 3 AM)"
+        echo "     - Access via: https://$DOMAIN_NAME"
+        echo
+    elif [ "$SETUP_SSL" = "selfsigned" ]; then
+        echo "  SSL Certificate Info:"
+        echo "     - Self-signed certificate installed"
+        echo "     - Browsers will show security warnings"
+        echo "     - Access via: https://$DOMAIN_NAME"
+        echo "     - Also works with IP: https://YOUR_SERVER_IP"
+        echo
+    else
+        echo "  Note: Using HTTP only. Enable SSL via Cloudflare for production."
+        echo
+    fi
     echo "  2. If you need to update configuration:"
     echo "     cd $APP_DIR && ./reconfig.sh"
     echo
@@ -884,6 +1270,9 @@ print_completion() {
     echo
     
     print_info "Visit your website at: http://$DOMAIN_NAME"
+    if [ "$SETUP_SSL" != "none" ]; then
+        print_info "Or via HTTPS: https://$DOMAIN_NAME"
+    fi
     print_info "(It may take 2-3 minutes for all services to be fully ready)"
     echo
 }
@@ -892,7 +1281,6 @@ print_completion() {
 main() {
     print_header "ESC Django Application - Automated Deployment"
     
-    # check_root
     check_sudo
     check_os
     gather_config
@@ -908,6 +1296,9 @@ main() {
     setup_systemd
     setup_firewall
     create_management_scripts
+    
+    # Save configuration for future runs
+    save_config
     
     # Ask if user wants to start now
     print_header "Ready to Start Application"
