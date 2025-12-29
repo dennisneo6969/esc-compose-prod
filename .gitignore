@@ -289,3 +289,6 @@ build/
 # Keep example files
 !.env.example
 !nginx.conf
+
+# Deployment configuration (contains sensitive info)
+.deployment_config

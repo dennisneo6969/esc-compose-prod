@@ -154,7 +154,13 @@ The script will guide you through an interactive setup. Here's what it will ask:
    - Sets up UFW firewall
    - Opens only necessary ports (22, 80, 443)
 
-6. **Environment Configuration**: **Interactive editor opens automatically**
+6. **SSL Certificate Setup**: Choose your SSL option
+   - **Let's Encrypt**: Free, trusted, auto-renewing (requires domain)
+   - **Self-Signed**: Works with IP addresses (shows browser warning)
+   - **None**: Use Cloudflare SSL only (HTTP to server)
+   - See [SSL.md](SSL.md) for detailed SSL guide
+
+7. **Environment Configuration**: **Interactive editor opens automatically**
    - SECRET_KEY is auto-generated ✓
    - Domain is pre-configured ✓
    - You configure: Email, Database, and optional services
@@ -726,13 +732,22 @@ When a new version is released:
 ```bash
 cd /opt/apps/esc
 ./deploy.sh
+
+# The script will detect your existing installation:
+# ✓ Existing deployment detected!
+# Use existing configuration? [Y/n]: Y
+# 
+# Only asks for Docker password, then:
+# - Pulls latest code
+# - Updates containers
+# - Restarts services
 ```
 
-This will:
-1. Pull the latest Docker image
-2. Stop old containers
-3. Start new containers
-4. Verify health checks
+**Smart Re-deployment**:
+- Preserves your domain, SSL, and configuration
+- Skips already-configured components
+- Only updates what's changed
+- See [REDEPLOYMENT.md](REDEPLOYMENT.md) for details
 
 ### Update System Packages
 

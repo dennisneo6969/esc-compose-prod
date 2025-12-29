@@ -49,7 +49,7 @@ services:
     command: >
       celery -A esc worker
       --loglevel=info
-      --concurrency=4
+      --concurrency=6
       --prefetch-multiplier=1
     env_file:
       - .env.docker

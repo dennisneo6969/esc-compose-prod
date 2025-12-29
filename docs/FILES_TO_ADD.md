@@ -56,6 +56,21 @@ Checklist for setting up your `esc-compose-prod` repository.
   - Recovery procedures
   - Location: Root of repository
 
+- [ ] **SSL.md**
+  - SSL certificate guide
+  - Let's Encrypt setup
+  - Self-signed certificates
+  - Cloudflare SSL configuration
+  - Certificate management
+  - Location: Root of repository
+
+- [ ] **REDEPLOYMENT.md**
+  - Re-deployment guide
+  - Configuration persistence
+  - Update strategies
+  - Common scenarios
+  - Location: Root of repository
+
 ### 3. Existing Files (Keep As Is)
 
 - [x] **compose.prod.yaml**
@@ -87,6 +102,8 @@ touch .gitignore
 touch CONFIGURATION.md
 touch TROUBLESHOOTING.md
 touch QUICKSTART.md
+touch SSL.md
+touch REDEPLOYMENT.md
 
 # README.md already exists - you'll update it
 ```
@@ -110,6 +127,8 @@ For each file, copy the content from the corresponding artifact:
 6. **QUICKSTART.md** → Copy from "QUICKSTART.md - Fast Deployment Guide"
 7. **CONFIGURATION.md** → Copy from "CONFIGURATION.md - Interactive Setup Guide"
 8. **TROUBLESHOOTING.md** → Copy from "TROUBLESHOOTING.md - Common Issues"
+9. **SSL.md** → Copy from "SSL.md - SSL Certificate Guide"
+10. **REDEPLOYMENT.md** → Copy from "REDEPLOYMENT.md - Re-deployment Guide"
 
 ### Step 5: Commit and Push
 
@@ -128,6 +147,9 @@ Features:
 - Auto-generates SECRET_KEY
 - Built-in configuration editor
 - Environment validation
+- SSL certificate options (Let's Encrypt, Self-signed, None)
+- Smart re-deployment (preserves config)
+- Configuration persistence
 - Complete documentation
 - Management scripts
 - Troubleshooting guides"
@@ -158,7 +180,9 @@ esc-compose-prod/
 ├── README.md                 ✅ Complete documentation
 ├── QUICKSTART.md            ✅ Fast deployment guide
 ├── CONFIGURATION.md         ✅ Configuration guide
-└── TROUBLESHOOTING.md       ✅ Troubleshooting guide
+├── TROUBLESHOOTING.md       ✅ Troubleshooting guide
+├── SSL.md                   ✅ SSL certificate guide
+└── REDEPLOYMENT.md          ✅ Re-deployment guide
 ```
 
 ## 🎯 What Makes This Special
@@ -198,13 +222,20 @@ esc-compose-prod/
    - Prevents common mistakes
    - Offers to re-edit if needed
 
-3. **One-Command Deployment**
+3. **Configuration Persistence** (NEW!)
+   - Remembers domain, Docker username, SSL settings
+   - Preserves .env.docker across updates
+   - Skips already-configured components
+   - Smart re-deployment for updates
+
+4. **One-Command Deployment**
    - Handles everything automatically
    - Idempotent (can run multiple times)
    - Error handling and recovery
    - Beautiful colored output
+   - SSL options (Let's Encrypt/Self-signed/None)
 
-4. **Complete Documentation**
+5. **Complete Documentation**
    - Quick start for experts
    - Detailed guide for beginners
    - Configuration scenarios
@@ -270,6 +301,8 @@ Complete automated deployment system with interactive configuration.
 - **Interactive Configuration**: Built-in editor with validation
 - **Auto-Generated Secrets**: Secure SECRET_KEY generation
 - **Smart Validation**: Prevents configuration mistakes
+- **SSL Options**: Let's Encrypt (free, trusted) or Self-signed (IP support)
+- **Configuration Persistence**: Remembers settings for easy updates
 - **Complete Documentation**: Guides for every scenario
 - **Management Scripts**: Easy updates and monitoring
 - **Production-Ready**: Security, firewall, systemd integration
@@ -288,12 +321,19 @@ chmod +x deploy.sh
 - [Quick Start](QUICKSTART.md) - 5-minute deployment
 - [Configuration](CONFIGURATION.md) - Interactive setup guide
 - [Troubleshooting](TROUBLESHOOTING.md) - Common issues
+- [SSL Guide](SSL.md) - Certificate configuration
+- [Re-deployment](REDEPLOYMENT.md) - Updating guide
 
 ## 🆕 What's New in v1.0.0
 
 - Interactive deployment script
 - Auto-generated SECRET_KEY
 - Built-in configuration validation
+- **SSL certificate options** (Let's Encrypt, Self-signed, None)
+- **Auto-renewing Let's Encrypt certificates**
+- **Self-signed certs for IP-based access**
+- **Configuration persistence** (remembers settings for updates)
+- **Smart re-deployment** (preserves existing setup)
 - Comprehensive documentation
 - Service-specific setup guides
 - Management utilities included
