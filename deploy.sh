@@ -98,6 +98,40 @@ EOF
     print_success "Configuration saved for future deployments"
 }
 
+# Configure SSL option (separate function)
+configure_ssl_option() {
+    echo
+    print_info "SSL Certificate Configuration"
+    echo "Choose SSL certificate option:"
+    echo "  1) Let's Encrypt (Free, auto-renewing, requires valid domain)"
+    echo "  2) Self-signed (Works with IP address, not trusted by browsers)"
+    echo "  3) None (Use Cloudflare SSL only)"
+    read -p "Select option [1/2/3]: " SSL_OPTION
+    SSL_OPTION=${SSL_OPTION:-3}
+    
+    if [ "$SSL_OPTION" = "1" ]; then
+        SETUP_SSL="letsencrypt"
+        if [ -n "$SSL_EMAIL" ]; then
+            read -p "Email for Let's Encrypt notifications [$SSL_EMAIL]: " NEW_SSL_EMAIL
+            SSL_EMAIL=${NEW_SSL_EMAIL:-$SSL_EMAIL}
+        else
+            read -p "Email for Let's Encrypt notifications: " SSL_EMAIL
+            while [ -z "$SSL_EMAIL" ]; do
+                print_warning "Email cannot be empty for Let's Encrypt"
+                read -p "Email for Let's Encrypt notifications: " SSL_EMAIL
+            done
+        fi
+    elif [ "$SSL_OPTION" = "2" ]; then
+        SETUP_SSL="selfsigned"
+        print_warning "Self-signed certificates will show security warnings in browsers"
+        print_info "This is useful for testing or IP-based access"
+    else
+        SETUP_SSL="none"
+        SSL_EMAIL=""
+        print_info "Will use HTTP only (Cloudflare handles SSL)"
+    fi
+}
+
 # Interactive configuration
 gather_config() {
     print_header "Configuration Setup"
@@ -215,41 +249,7 @@ gather_config() {
     else
         configure_ssl_option
     fi
-}
-
-# Configure SSL option (extracted to separate function)
-configure_ssl_option() {
-    echo
-    print_info "SSL Certificate Configuration"
-    echo "Choose SSL certificate option:"
-    echo "  1) Let's Encrypt (Free, auto-renewing, requires valid domain)"
-    echo "  2) Self-signed (Works with IP address, not trusted by browsers)"
-    echo "  3) None (Use Cloudflare SSL only)"
-    read -p "Select option [1/2/3]: " SSL_OPTION
-    SSL_OPTION=${SSL_OPTION:-3}
     
-    if [ "$SSL_OPTION" = "1" ]; then
-        SETUP_SSL="letsencrypt"
-        if [ -n "$SSL_EMAIL" ]; then
-            read -p "Email for Let's Encrypt notifications [$SSL_EMAIL]: " NEW_SSL_EMAIL
-            SSL_EMAIL=${NEW_SSL_EMAIL:-$SSL_EMAIL}
-        else
-            read -p "Email for Let's Encrypt notifications: " SSL_EMAIL
-            while [ -z "$SSL_EMAIL" ]; do
-                print_warning "Email cannot be empty for Let's Encrypt"
-                read -p "Email for Let's Encrypt notifications: " SSL_EMAIL
-            done
-        fi
-    elif [ "$SSL_OPTION" = "2" ]; then
-        SETUP_SSL="selfsigned"
-        print_warning "Self-signed certificates will show security warnings in browsers"
-        print_info "This is useful for testing or IP-based access"
-    else
-        SETUP_SSL="none"
-        SSL_EMAIL=""
-        print_info "Will use HTTP only (Cloudflare handles SSL)"
-    fi
-}
     print_header "Configuration Summary"
     echo "Domain: $DOMAIN_NAME"
     echo "Docker Hub User: $DOCKER_USERNAME"
