@@ -12,19 +12,8 @@ services:
       - "--interval"
       - "300"
       - "--rolling-restart"
-    environment:
-      WATCHTOWER_LABEL_ENABLE: "true"
-      WATCHTOWER_INCLUDE_RESTARTING: "true"
-
-      # Map Django SMTP → Watchtower SMTP
-      WATCHTOWER_NOTIFICATION_EMAIL_FROM: ${DEFAULT_FROM_EMAIL}
-      WATCHTOWER_NOTIFICATION_EMAIL_TO: ${ADMIN_EMAIL}
-      WATCHTOWER_NOTIFICATION_EMAIL_SERVER: ${EMAIL_HOST}
-      WATCHTOWER_NOTIFICATION_EMAIL_PORT: ${EMAIL_PORT}
-      WATCHTOWER_NOTIFICATION_EMAIL_SERVER_USER: ${EMAIL_HOST_USER}
-      WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD: ${EMAIL_HOST_PASSWORD}
-      WATCHTOWER_NOTIFICATION_EMAIL_SUBJECTTAG: "[ESC Watchtower]"
-
+      - "--notifications"
+      - "email"
     security_opt:
       - no-new-privileges:true
 
